@@ -15,6 +15,7 @@ from models import User, Game, Score
 from models import StringMessage, NewGameForm, GameForm, MakeMoveForm,\
     ScoreForms
 from models import BoardMessage
+from models import Result
 
 # from models import ScoresListRequestMessage
 # from models import ScoresListResponseMessage
@@ -32,7 +33,7 @@ MAKE_MOVE_REQUEST = endpoints.ResourceContainer(
 USER_REQUEST = endpoints.ResourceContainer(user_name=messages.StringField(1),
                                            email=messages.StringField(2))
 
-MEMCACHE_MOVES_REMAINING = 'MOVES_REMAINING'
+MEMCACHE_WINNING_CHANCE = 'WINNING_CHANCE'
 
 @endpoints.api(name='tic_tac_toe', version='v1')
 class TicTacToeApi(remote.Service):
@@ -78,8 +79,8 @@ class TicTacToeApi(remote.Service):
         except ValueError:
             raise endpoints.BadRequestException('Value Error')
 
-        # Use a task queue to update the board state
-        ## taskqueue.add(url='/tasks/cache_board_state')
+        # Use a task queue to cache winning chance
+        taskqueue.add(url='/tasks/cache_winning_chance')
         return game.to_form('Good luck playing Tic-Tac-Toe!')
 
     @endpoints.method(request_message=GET_GAME_REQUEST,
@@ -139,13 +140,15 @@ class TicTacToeApi(remote.Service):
         ### after every successful move, check the board board_state
         ### check whether some one has won, or a tie
         game_result = game.judge_win()
-        if game_result["end"]: 
-            if game_result["winner"] =="TIE":
-                game.to_form("Game Over, it is a tie!")
-            else:
-                game.to_form("Game Over, %s has won" % game_result["winner"])
-
         game.put()
+        if game_result["end"]: 
+            if game_result["result"] =="TIE":
+                return game.to_form("Game Over, it is a tie!")
+            else:
+                return game.to_form("Game Over, %s has won" % game_result["winner"])
+
+        
+        return game.to_form("Next move: %s" % game.user_of_next_move.get().name)
 
 
     @endpoints.method(response_message=ScoreForms,
@@ -169,6 +172,27 @@ class TicTacToeApi(remote.Service):
                     'A User with that name does not exist!')
         scores = Score.query(Score.user == user.key)
         return ScoreForms(items=[score.to_form() for score in scores])
+
+    @endpoints.method(response_message=StringMessage,
+                      path='games/winning_chance',
+                      name='get_winning_chance',
+                      http_method='GET')
+    def get_winning_chance(self, request):
+        """Get the cached average moves remaining"""
+        return StringMessage(message=memcache.get(MEMCACHE_WINNING_CHANCE) or '')
+
+    @staticmethod
+    def _cache_winning_chance():
+        """Populates memcache with the average moves remaining of Games"""
+        current_user = get_endpoints_current_user()
+        scores = Score.query(Score.user.name == current_user.name).fetch()
+        if scores:
+            count = 2*len(scores)
+            wins = sum([score.result for score in scores])
+            chance = wins/float(count)
+            
+            memcache.set(MEMCACHE_WINNING_CHANCE,
+                         'The winning chance is {:.2f}'.format(chance))
 
 
 ##add tic-tac-toe api

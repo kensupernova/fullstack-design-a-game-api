@@ -1,4 +1,4 @@
-#Full Stack Nanodegree Project 4 Refresh
+#Full Stack Nanodegree Project － Design A Game
 
 ## Set-Up Instructions:
 1.  Update the value of application in app.yaml to the app ID you have registered
@@ -8,15 +8,9 @@
 1.  (Optional) Generate your client library(ies) with the endpoints tool.
  Deploy your application.
  
- 
- 
+
 ##Game Description:
-Guess a number is a simple guessing game. Each game begins with a random 'target'
-number between the minimum and maximum values provided, and a maximum number of
-'attempts'. 'Guesses' are sent to the `make_move` endpoint which will reply
-with either: 'too low', 'too high', 'you win', or 'game over' (if the maximum
-number of attempts is reached).
-Many different Guess a Number games can be played by many different Users at any
+Tic-Tac-Toe is a simple game for two players. The default opponnet user is computer. It begins with 3X3 empty grid. Each players has to choose a symbol 'O' or 'X'. Two players one after another place 'O' or 'X' in the grid. Whoever succeeds in placing three marks in the straight line wins. Each move has to choose an empty indice in the grid. Many different Tic-Tac-Toe can be played by many different Users at any
 given time. Each game can be retrieved or played by using the path parameter
 `urlsafe_game_key`.
 
@@ -40,12 +34,10 @@ given time. Each game can be retrieved or played by using the path parameter
  - **new_game**
     - Path: 'game'
     - Method: POST
-    - Parameters: user_name, min, max, attempts
+    - Parameters: user_name, user_tic, opponent_name, opponent_tic, user_of_next_move
     - Returns: GameForm with initial game state.
-    - Description: Creates a new Game. user_name provided must correspond to an
-    existing user - will raise a NotFoundException if not. Min must be less than
-    max. Also adds a task to a task queue to update the average moves remaining
-    for active games.
+    - Description: Creates a new Game. user_name or opponent_name provided must correspond to an
+    existing user - will raise a NotFoundException if not. 
      
  - **get_game**
     - Path: 'game/{urlsafe_game_key}'
@@ -57,10 +49,10 @@ given time. Each game can be retrieved or played by using the path parameter
  - **make_move**
     - Path: 'game/{urlsafe_game_key}'
     - Method: PUT
-    - Parameters: urlsafe_game_key, guess
+    - Parameters: urlsafe_game_key, position
     - Returns: GameForm with new game state.
-    - Description: Accepts a 'guess' and returns the updated state of the game.
-    If this causes a game to end, a corresponding Score entity will be created.
+    - Description: Accepts a position in the free indice in the grid and returns the updated state of the game. 
+    If new position causes a game to end (win, tie, lose), a corresponding Score entity will be created.
     
  - **get_scores**
     - Path: 'scores'
@@ -77,13 +69,12 @@ given time. Each game can be retrieved or played by using the path parameter
     - Description: Returns all Scores recorded by the provided player (unordered).
     Will raise a NotFoundException if the User does not exist.
     
- - **get_active_game_count**
+ - **get_winning_chance**
     - Path: 'games/active'
     - Method: GET
     - Parameters: None
     - Returns: StringMessage
-    - Description: Gets the average number of attempts remaining for all games
-    from a previously cached memcache key.
+    - Description: Gets the winning chance of the current user.
 
 ##Models Included:
  - **User**
@@ -97,15 +88,14 @@ given time. Each game can be retrieved or played by using the path parameter
     
 ##Forms Included:
  - **GameForm**
-    - Representation of a Game's state (urlsafe_key, attempts_remaining,
-    game_over flag, message, user_name).
+    - Representation of a Game's state (urlsafe_key, board_state,
+    user_of_next_move, game_over, message, user_name, user_tic, opponent_name, opponent_tic).
  - **NewGameForm**
-    - Used to create a new game (user_name, min, max, attempts)
+    - Used to create a new game (user_name, user_tic, opponent_name, opponent_tic, user_of_next_move)
  - **MakeMoveForm**
-    - Inbound make move form (guess).
+    - Inbound make move form (position).
  - **ScoreForm**
-    - Representation of a completed game's Score (user_name, date, won flag,
-    guesses).
+    - Representation of a completed game's Score (user_name, date, result, board_state).
  - **ScoreForms**
     - Multiple ScoreForm container.
  - **StringMessage**

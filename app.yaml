@@ -32,7 +32,7 @@ handlers:
 - url: /_ah/spi/.*
   script: api.api
 
-- url: /tasks/cache_average_attempts
+- url: /tasks/cache_winning_chance
   script: main.app
 
 - url: /crons/send_reminder

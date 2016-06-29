@@ -6,8 +6,14 @@ import random
 from datetime import date
 from protorpc import messages
 from google.appengine.ext import ndb
+from google.appengine.ext.ndb import msgprop
 
 from utils import get_endpoints_current_user
+
+class Result(messages.Enum):
+    LOSE = 0
+    TIE = 1
+    WIN = 2
 
 
 class User(ndb.Model):
@@ -71,14 +77,14 @@ class Game(ndb.Model):
         form.message = message
         return form
 
-    def end_game(self, end, winner):
-        """Ends the game - if won is True, the player won. - if won is False,
-        the player lost."""
+    def end_game(self, end, result):
+        """Ends the game"""
         self.game_over = True
         self.put()
         # Add the game to the score 'board'
-        score = Score(date=date.today(), winner=winner,
-                      board_state=self.board_state)
+
+        score = Score(user=self.user, date=date.today(), 
+                      board_state=self.board_state, result=result)
         score.put()
 
     def judge_game(self):
@@ -86,10 +92,10 @@ class Game(ndb.Model):
         ## check whether free indices
         ## if not, a tie
         if int(self.board_state.find("-")) == -1:
-            self.end_game(end=True, winner=None)
+            self.end_game(end=True, result=Result.TIE)
             return {
                 "end": True,
-                "winner": "TIE"
+                "result": "TIE"
             }
 
         positions_by_user = [match.start()
@@ -118,27 +124,30 @@ class Game(ndb.Model):
 
         if positions_by_user_total == 15 and positions_by_opponent_total == 15:
             result["end"] = True
-            result["winner"] = "TIE"
+            result["winner"] = "BOTH"
+            result["result"] = "TIE"
 
-            self.end_game(end=True, winner=None)
+            self.end_game(end=True, result=Result.Tie)
 
-        elif positions_by_user_total == 15:
+        elif positions_by_user_total == 15 and positions_by_opponent_total != 15:
             result["end"] = True
             result["winner"] = self.user_name
+            result["result"] = "WIN"
+            self.end_game(end=True, result=Result.WIN)
 
-            self.end_game(end=True, winner=self.user)
-
-        elif positions_by_opponent_total == 15:
+        elif positions_by_opponent_total == 15 and positions_by_user_total != 15 :
             result["end"] = True
             result["winner"] = self.opponent_name
+            result["result"] = "LOSE"
 
-            self.end_game(end=True, winner=self.opponent)
+
+            self.end_game(end=True, result=Result.LOSE)
 
         else:
             result["end"] = False
-            result["winner"] = "NOONE"
 
         return result
+
 
 
 
@@ -147,10 +156,10 @@ class Score(ndb.Model):
     user = ndb.KeyProperty(required=True, kind='User')
     date = ndb.DateProperty(required=True)
     board_state = ndb.StringProperty(required=True)
-    won = ndb.BooleanProperty(required=True)
+    result = msgprop.EnumProperty(Result, required=True)
 
     def to_form(self):
-        return ScoreForm(user_name=self.user.get().name, won=self.won,
+        return ScoreForm(user_name=self.user.get().name, result=self.result,
                          date=str(self.date), board_state=self.board_state)
 
     @classmethod
@@ -162,7 +171,7 @@ class Score(ndb.Model):
             The Score entity that was inserted.
         """
         current_user = get_endpoints_current_user()
-        entity = cls(winner=message.own, user=current_user, board_state=message.board_state)
+        entity = cls(result=message.result, user=current_user, board_state=message.board_state)
         entity.put()
         return entity
 
@@ -206,7 +215,6 @@ class NewGameForm(messages.Message):
     user_tic = messages.StringField(2, required=True, default="O")
     opponent_name = messages.StringField(3, required=True, default="computer")
     opponent_tic = messages.StringField(4, required=True, default="X")
-    board_state = messages.StringField(5, required=True, default="---------")
 
     user_of_next_move = messages.StringField(6, required=True)
 
@@ -223,7 +231,7 @@ class ScoreForm(messages.Message):
     """ScoreForm for outbound Score information"""
     user_name = messages.StringField(1, required=True)
     date = messages.StringField(2, required=True)
-    won = messages.BooleanField(3, required=True)
+    result = messages.BooleanField(3, required=True)
     board_state  =  messages.StringField(4, required=True)
 
 
@@ -242,27 +250,6 @@ class BoardMessage(messages.Message):
     """Board board_state"""
     board_state = messages.StringField(1, required=True)
 
-# class ScoreRequestMessage(messages.Message):
-#     """When request a single score"""
-#     outcome = messages.StringField(1, required=True)
-
-# class ScoreResponseMessage(messages.Message):
-#     """Response score"""
-#     id = messages.IntegerField(1)
-#     outcome = messages.StringField(2)
-#     played = messages.StringField(3)
-
-# class ScoresListRequestMessage(messages.Message):
-#     """When request scores list"""
-#     limit = messages.IntegerField(1, default=10)
-#     class Order(messages.Enum):
-#         WHEN = 1
-#         TEXT = 2
-#     order = messages.EnumField(Order, 2, default=Order.WHEN)
-
-# class ScoresListResponseMessage(messages.Message):
-#     """Respond with a list stored scores"""
-#     items = messages.MessageField(ScoreResponseMessage, 1, repeated=True)
 
 
 
