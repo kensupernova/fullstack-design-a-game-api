@@ -12,7 +12,13 @@
 ##Game Description:
 Tic-Tac-Toe is a simple game for two players. The default opponnet user is computer. It begins with 3X3 empty grid. Each players has to choose a symbol 'O' or 'X'. Two players one after another place 'O' or 'X' in the grid. Whoever succeeds in placing three marks in the straight line wins. Each move has to choose an empty indice in the grid. Many different Tic-Tac-Toe can be played by many different Users at any
 given time. Each game can be retrieved or played by using the path parameter
-`urlsafe_game_key`.
+`urlsafe_game_key`. 
+
+## Steps to play the game:
+1. create user with username and email address
+2. start new game with username and opponnet name, and their ticks for playing (optional). Both must be registered.
+3. easy move is new position in the free indice in the 3X3 grid.
+4. whoever make three ticks in a line wins. It could also be a tie. 
 
 ##Files Included:
  - api.py: Contains endpoints and game playing logic.

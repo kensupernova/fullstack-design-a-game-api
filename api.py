@@ -3,26 +3,15 @@
 project name: guess-a-game
 game: tic-tac-toe
 """
-import random
 import re
-import logging
 import endpoints
 from protorpc import remote, messages
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
 
-from models import User, Game, Score
-from models import StringMessage, NewGameForm, GameForm, MakeMoveForm,\
-    ScoreForms
-from models import BoardMessage
-from models import Result
+from models import Result, User, Game, Score, StringMessage, NewGameForm, GameForm, MakeMoveForm, ScoreForms, BoardMessage
 
-# from models import ScoresListRequestMessage
-# from models import ScoresListResponseMessage
-# from models import ScoreRequestMessage
-# from models import ScoreResponseMessage
-
-from utils import get_by_urlsafe
+from utils import get_by_urlsafe, get_endpoints_current_user
 
 NEW_GAME_REQUEST = endpoints.ResourceContainer(NewGameForm)
 GET_GAME_REQUEST = endpoints.ResourceContainer(
@@ -44,7 +33,16 @@ class TicTacToeApi(remote.Service):
                       name='create_user',
                       http_method='POST')
     def create_user(self, request):
-        """Create a User. Requires a unique username"""
+        """
+        Args:
+            request: The USER_REQUEST objects, which includes a users
+                chosen name and an optional email.
+        Returns:
+            StringMessage: A message that is sent to the client, saying that
+                the user has been created.
+        Raises:
+            endpoints.ConflictException: If the user already exists.
+        """
         if User.query(User.name == request.user_name).get():
             raise endpoints.ConflictException(
                     'A User with that name already exists!')
@@ -72,10 +70,10 @@ class TicTacToeApi(remote.Service):
                     'A User with that name %s does not exist!' % request.opponent_name)
 
         try:
-
+            ### user is the one for the first move in the new game
             game = Game.new_game(user=user.key, user_tic=request.user_tic, 
               opponent=opponent.key, opponent_tic=request.opponent_tic, 
-              user_of_next_move=request.user_of_next_move)
+              user_of_next_move=user.key)
         except ValueError:
             raise endpoints.BadRequestException('Value Error')
 
@@ -105,20 +103,28 @@ class TicTacToeApi(remote.Service):
         """Makes a move. Returns a game board_state with message"""
         game = get_by_urlsafe(request.urlsafe_game_key, Game)
         if game.game_over:
+            raise endpoints.ForbiddenException('Illegal action: Game is already over.')
             return game.to_form('Game already over!')
 
-        if request.user_of_move!= game.user.name and request.user_of_move!= game.opponent.name:
+        if request.user_of_move!= game.user.get().name and request.user_of_move!= game.opponent.get().name:
               raise endpoints.NotFoundException(
                     'A User with that name %s are not players of current game' % request.user_of_move)
 
-        user_of_move = User.query(User.name == request.user_of_move).get()
+        user_of_move_key = User.query(User.name == request.user_of_move)
+        user_of_move = user_of_move_key.get()
         
         if not user_of_move:
             raise endpoints.NotFoundException(
                     'A User with that name %s does not exist!' % request.user_of_move)
-        
 
-        new_position = int(request.position)
+        if game.user_of_next_move.get().name != request.user_of_move:
+            raise endpoints.NotFoundException(
+                    'A User with that name %s is not the game of the current move' % request.user_of_move)
+            return game.to_form('It is not your turn!')
+        
+        ### request.position is integer as defined in models.py
+        new_position = request.position
+        
         board_state_list = list(game.board_state)
 
         free_indices = [match.start()
@@ -127,7 +133,7 @@ class TicTacToeApi(remote.Service):
             return game.to_form("position has already been taken! Choose another position" % new_position)
 
 
-        if request.user_of_move == game.user.name:
+        if request.user_of_move == game.user.get().name:
             board_state_list[new_position] = game.user_tic
             game.user_of_next_move = game.opponent
         else:
@@ -139,7 +145,7 @@ class TicTacToeApi(remote.Service):
 
         ### after every successful move, check the board board_state
         ### check whether some one has won, or a tie
-        game_result = game.judge_win()
+        game_result = game.judge_game()
         game.put()
         if game_result["end"]: 
             if game_result["result"] =="TIE":
@@ -195,5 +201,5 @@ class TicTacToeApi(remote.Service):
                          'The winning chance is {:.2f}'.format(chance))
 
 
-##add tic-tac-toe api
+##add tic-tac-toe 
 api = endpoints.api_server([TicTacToeApi])

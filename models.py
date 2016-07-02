@@ -1,8 +1,7 @@
 """models.py - This file contains the class definitions for the Datastore
-entities used by the Game. Because these classes are also regular Python
-classes they can include methods (such as 'to_form' and 'new_game')."""
-
-import random
+entities and Endpoints used by the Game. It inlcudes User, Game, Score. And it also
+include message model GameForm, NewGameForm, MessageForm, ScoreForm, ScoreForms. """
+import re
 from datetime import date
 from protorpc import messages
 from google.appengine.ext import ndb
@@ -83,7 +82,7 @@ class Game(ndb.Model):
         self.put()
         # Add the game to the score 'board'
 
-        score = Score(user=self.user, date=date.today(), 
+        score = Score(user=self.user, opponent=self.opponent,date=date.today(), 
                       board_state=self.board_state, result=result)
         score.put()
 
@@ -131,7 +130,7 @@ class Game(ndb.Model):
 
         elif positions_by_user_total == 15 and positions_by_opponent_total != 15:
             result["end"] = True
-            result["winner"] = self.user_name
+            result["winner"] = self.user.get().name
             result["result"] = "WIN"
             self.end_game(end=True, result=Result.WIN)
 
@@ -154,13 +153,23 @@ class Game(ndb.Model):
 class Score(ndb.Model):
     """Score object"""
     user = ndb.KeyProperty(required=True, kind='User')
+    opponent = ndb.KeyProperty(required=True, kind='User')
     date = ndb.DateProperty(required=True)
     board_state = ndb.StringProperty(required=True)
     result = msgprop.EnumProperty(Result, required=True)
 
     def to_form(self):
-        return ScoreForm(user_name=self.user.get().name, result=self.result,
-                         date=str(self.date), board_state=self.board_state)
+        if self.result == Result.WIN:
+            result = "WIN"
+        elif self.result == Result.TIE:
+            result = "TIE"
+        else:
+            result = "LOSE"
+        if not self.opponent:
+            return ScoreForm(user_name=self.user.get().name, result=result,
+                         date=str(self.date), board_state=self.board_state, opponent_name="computer")
+        return ScoreForm(user_name=self.user.get().name, result=result,
+                         date=str(self.date), board_state=self.board_state, opponent_name=self.opponent.get().name)
 
     @classmethod
     def from_form(cls, message):
@@ -189,8 +198,6 @@ class Score(ndb.Model):
     @property
     def timestamp(self):
         return self.date.strftime('%b %d, %Y %I:%M:%S %p')
-    
-
 
 class GameForm(messages.Message):
     """GameForm for outbound game board_state information"""
@@ -216,23 +223,25 @@ class NewGameForm(messages.Message):
     opponent_name = messages.StringField(3, required=True, default="computer")
     opponent_tic = messages.StringField(4, required=True, default="X")
 
-    user_of_next_move = messages.StringField(6, required=True)
-
 
 class MakeMoveForm(messages.Message):
-    """Used to make a move in an existing game"""
-    ### position is an integer from 0 - 8 (inclusive)
-    ### it will be transformed into the position on the 3X3 grid
-    position = messages.IntegerField(1, required=True)
-    user_of_move =  messages.StringField(2, required=True)
+    """
+    Used to make a move in an existing game. 
+    position is an integer from 0 - 8 (inclusive)
+    it will be transformed into the position on the 3X3 grid
+    """
+    user_of_move =  messages.StringField(1, required=True)
+    position = messages.IntegerField(2, required=True)
+    
 
 
 class ScoreForm(messages.Message):
     """ScoreForm for outbound Score information"""
     user_name = messages.StringField(1, required=True)
     date = messages.StringField(2, required=True)
-    result = messages.BooleanField(3, required=True)
+    result = messages.StringField(3, required=True)
     board_state  =  messages.StringField(4, required=True)
+    opponent_name = messages.StringField(5, required=False, default="computer")
 
 
 class ScoreForms(messages.Message):
