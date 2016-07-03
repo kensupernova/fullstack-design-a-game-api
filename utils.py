@@ -45,7 +45,12 @@ def get_endpoints_current_user(raise_unauthorized=True):
         The signed in user if there is one, else None if there is no signed in
         user and raise_unauthorized is False.
     """
-    current_user = endpoints.get_current_user()
-    if raise_unauthorized and current_user is None:
-        raise endpoints.UnauthorizedException('Invalid token.')
-    return current_user
+    try: 
+        current_user = endpoints.get_current_user()
+        if raise_unauthorized and current_user is None:
+            raise endpoints.UnauthorizedException('Invalid token.')
+        return current_user
+    except:
+        return None
+
+

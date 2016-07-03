@@ -81,7 +81,7 @@ class TicTacToeApi(remote.Service):
             raise endpoints.BadRequestException('Value Error')
 
         # Use a task queue to cache winning chance
-        taskqueue.add(url='/tasks/cache_winning_chance')
+        taskqueue.add(url='/tasks/cache_winning_chance/')
         
         return game.to_form('Good luck playing Tic-Tac-Toe!')
 
@@ -107,8 +107,11 @@ class TicTacToeApi(remote.Service):
         """Makes a move in tic-tac-toe"""
         game = get_by_urlsafe(request.urlsafe_game_key, Game)
         if game.game_over:
-            return game.to_form('Game already over!')
+            ##return game.to_form('Game already over!')
             raise endpoints.ForbiddenException('Illegal action: Game is already over.')
+        if game.is_canceled:
+            ##return game.to_form('Game already canceled!')
+            raise endpoints.ForbiddenException('Illegal action: Game is already canceled.')
             
 
         if request.user_of_move!= game.user.get().name and request.user_of_move!= game.opponent.get().name:
@@ -123,21 +126,24 @@ class TicTacToeApi(remote.Service):
                     'User %s does not exist!' % request.user_of_move)
 
         if game.user_of_next_move.get().name != request.user_of_move:
-            return game.to_form('User %s is not the game of the current move, %s please!' % (request.user_of_move, game.user_of_next_move.get().name))
-            
-            raise endpoints.NotFoundException(
-                    'User %s is not the game of the current move, %s please!' % (request.user_of_move, game.user_of_next_move.get().name))
+            ## return game.to_form('User %s is not the game of the current move, %s please!' % (request.user_of_move, game.user_of_next_move.get().name))
+
+            raise endpoints.ForbiddenException('User %s is not the game of the current move, %s please!' % (request.user_of_move, game.user_of_next_move.get().name))
             
         
         ### request.position is integer as defined in models.py
         new_position = request.position
-        
+        if new_position >= 9:
+            ##return game.to_form("position %s is out of the grid! Choose another position" % new_position)
+            raise endpoints.ForbiddenException("position %s is out of the grid! Choose another position" % new_position)
+
+        # board_state from string into char list
         board_state_list = list(game.board_state)
 
         free_indices = [match.start()
                                 for match in re.finditer("-", game.board_state)]
         if new_position not in free_indices:
-            return game.to_form("position has already been taken! %s Choose another position" % new_position)
+            return game.to_form("position  %s  has already been taken! Choose another position" % new_position)
 
 
         if request.user_of_move == game.user.get().name:
@@ -224,7 +230,7 @@ class TicTacToeApi(remote.Service):
         http_method='GET')
     def get_user_games(self, request):
         """
-        Return all of a user's active games.
+        Return all of a user's active games, not include canceled games.
         """
         user = User.query(User.name == request.user_name).get()
         if not user:
@@ -232,8 +238,13 @@ class TicTacToeApi(remote.Service):
                     'A User with that name %s does not exist!' % request.user_name)
         
         active_games = Game.query(Game.user == user.key).filter(Game.game_over != True)
+    
+        forms = []
+        for game in active_games:
+            if not game.is_canceled:
+                forms.append(game.to_form(""))
         
-        return GameForms(items=[game.to_form("") for game in active_games])
+        return GameForms(items=forms)
 
 
     @endpoints.method(
@@ -242,7 +253,7 @@ class TicTacToeApi(remote.Service):
         response_message=GameForm,
         path='/games/{urlsafe_game_key}/cancel', 
         name='cancel_game',
-        http_method='POST')
+        http_method='PUT')
     def cancel_game(self, request):
         """
         This endpoint allows users to cancel a game in progress.
@@ -343,8 +354,12 @@ class TicTacToeApi(remote.Service):
     @staticmethod
     def _cache_winning_chance():
         """Populates memcache with the average moves remaining of Games"""
-        current_user = get_endpoints_current_user()
-        scores = Score.query(Score.user.name == current_user.name).fetch()
+        
+        # current_user = get_endpoints_current_user()
+        # if not current_user:
+        #     raise endpoints.ForbiddenException("No valid endpoints user in the environment")
+        
+        scores = Score.query().fetch()
         if scores:
             total = 2*len(scores)
             wins = sum([score.user_score_to_int() for score in scores])
@@ -353,10 +368,11 @@ class TicTacToeApi(remote.Service):
             memcache.set(MEMCACHE_WINNING_CHANCE,
                          'The winning chance is {:.2f}'.format(chance))
 
-    @endpoints.method(response_message=StringMessage,
-                      path='games/winning_chance',
-                      name='get_winning_chance',
-                      http_method='GET')
+    @endpoints.method(
+        response_message=StringMessage,
+        path='games/winning_chance/',
+        name='get_winning_chance',
+        http_method='GET')
     def get_winning_chance(self, request):
         """Get the cached average moves remaining"""
         return StringMessage(message=memcache.get(MEMCACHE_WINNING_CHANCE) or '')
