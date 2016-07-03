@@ -26,6 +26,8 @@ USER_REQUEST = endpoints.ResourceContainer(user_name=messages.StringField(1),
                                            email=messages.StringField(2))
 
 MEMCACHE_WINNING_CHANCE = 'WINNING_CHANCE'
+GLOBAL_CURRENT_USER_NAME = ""
+
 
 @endpoints.api(name='tic_tac_toe', version='v1')
 class TicTacToeApi(remote.Service):
@@ -82,6 +84,11 @@ class TicTacToeApi(remote.Service):
 
         # Use a task queue to cache winning chance
         taskqueue.add(url='/tasks/cache_winning_chance/')
+
+        taskqueue.add(url='/tasks/cache_winning_chance/', target="worker", 
+            params={'user_name':request.user_name}, name="cache-winning-chance")
+
+        GLOBAL_CURRENT_USER_NAME = request.user_name
         
         return game.to_form('Good luck playing Tic-Tac-Toe!')
 
@@ -352,20 +359,32 @@ class TicTacToeApi(remote.Service):
 
 
     @staticmethod
-    def _cache_winning_chance():
+    def _cache_winning_chance(user_name):
         """Populates memcache with the average moves remaining of Games"""
         
-        # current_user = get_endpoints_current_user()
-        # if not current_user:
-        #     raise endpoints.ForbiddenException("No valid endpoints user in the environment")
+        ## the scores user earned when it is user in games
+        user_chance = 0
+        oppo_chance = 0
+
+        user_scores = Score.query(Game.user.get().name == user_name).fetch()
+        if user_scores:
+            total = 2*len(user_scores)
+            wins = sum([score.user_score_to_int() for score in user_scores])
+            user_chance = wins/float(total)
         
-        scores = Score.query().fetch()
-        if scores:
-            total = 2*len(scores)
-            wins = sum([score.user_score_to_int() for score in scores])
-            chance = wins/float(total)
-            
-            memcache.set(MEMCACHE_WINNING_CHANCE,
+        ## score the user earned when it is the opponent in games
+        oppo_scores = Score.query(Game.user.get().name == GLOBAL_CURRENT_USER_NAME).fetch()
+        if user_scores:
+            total = 2*len(oppo_scores)
+            wins = sum([score.user_score_to_int() for score in oppo_scores])
+            oppo_chance = wins/float(total)
+        if user_chance == 0 or oppo_chance == 0:
+            chance = user_chance | oppo_chance
+        else:
+            change = (user_chance+oppo_chance)/2
+
+        print "Winning chance of {} is {}".format(GLOBAL_CURRENT_USER_NAME, chance)
+        memcache.set(MEMCACHE_WINNING_CHANCE,
                          'The winning chance is {:.2f}'.format(chance))
 
     @endpoints.method(

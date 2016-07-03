@@ -38,7 +38,8 @@ class SendReminderEmail(webapp2.RequestHandler):
 class UpdateWinningChance(webapp2.RequestHandler):
     def post(self):
         """Update game listing announcement in memcache."""
-        TicTacToeApi._cache_winning_chance()
+        user_name = self.request.get("user_name")
+        TicTacToeApi._cache_winning_chance(user_name)
         self.response.set_status(204)
 
 
