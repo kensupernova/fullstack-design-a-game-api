@@ -177,6 +177,7 @@ class Score(ndb.Model):
     opponent = ndb.KeyProperty(required=True, kind='User')
     date = ndb.DateProperty(required=True)
     board_state = ndb.StringProperty(required=True)
+    # E
     result = msgprop.EnumProperty(Result, required=True)
 
     def to_form(self):
