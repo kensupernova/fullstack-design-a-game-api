@@ -22,8 +22,9 @@ class User(ndb.Model):
 
 ### CREATE USER - COMPUTER 
 ### COMPUTER WILL BE DEFAULT USER IN THE GAME
-computer = User(name="computer")
-computer.put()
+if not User.query(User.name == "computer").get():
+    computer = User(name="computer")
+    computer.put()
 
 class Game(ndb.Model):
     """Game object"""
@@ -37,6 +38,10 @@ class Game(ndb.Model):
     game_over = ndb.BooleanProperty(required=True, default=False)
     board_state = ndb.StringProperty(required=True)
     user_of_next_move = ndb.KeyProperty(required=True, kind='User')
+    is_canceled = ndb.BooleanProperty(required=False, default=False)
+
+    ## history will be saved as string with move (user_of_move, position_of_move)
+    history = ndb.StringProperty(required=True, default="")
     
     ### tic tac toe game board state
     ### 3X3 = 9 characters
@@ -72,6 +77,8 @@ class Game(ndb.Model):
         form.board_state = self.board_state
         form.game_over = self.game_over
         form.user_of_next_move = self.user_of_next_move.get().name
+
+        form.is_canceled = self.is_canceled
         
         form.message = message
         return form
@@ -82,20 +89,34 @@ class Game(ndb.Model):
         self.put()
         # Add the game to the score 'board'
 
-        score = Score(user=self.user, opponent=self.opponent,date=date.today(), 
+        score = Score(user=self.user, opponent=self.opponent, date=date.today(), 
                       board_state=self.board_state, result=result)
         score.put()
 
+        ## move from either player will end the game, and generate two scores
+        ## one for user, one for opponent
+        if result ==  Result.WIN:
+            opponent_result = Result.LOSE
+        elif result == Result.LOSE:
+            opponent_result = Result.WIN
+        else:
+            opponent_result = result
+
+        oppo_score = Score(user=self.opponent, opponent=self.user, date=date.today(), 
+                      board_state=self.board_state, result=opponent_result)
+        oppo_score.put()
+
     def judge_game(self):
-    
+        ## return whether ended, who is winner, result of game
+        result = {}
+
         ## check whether free indices
         ## if not, a tie
         if int(self.board_state.find("-")) == -1:
-            self.end_game(end=True, result=Result.TIE)
-            return {
-                "end": True,
-                "result": "TIE"
-            }
+            self.end_game(end=True, result=Result.TIE)  
+            result["end"] = True
+            result["winner"] = "BOTH"
+            result["result"] = "TIE"
 
         positions_by_user = [match.start()
                                 for match in re.finditer(self.user_tic, self.board_state)]
@@ -119,7 +140,7 @@ class Game(ndb.Model):
 
         # positions_by_user_total =reduce(lambda a, b: magic_square[a]+magic_square[b], positions_by_user)
 
-        result = {}
+        
 
         if positions_by_user_total == 15 and positions_by_opponent_total == 15:
             result["end"] = True
@@ -171,6 +192,7 @@ class Score(ndb.Model):
         return ScoreForm(user_name=self.user.get().name, result=result,
                          date=str(self.date), board_state=self.board_state, opponent_name=self.opponent.get().name)
 
+
     @classmethod
     def from_form(cls, message):
         """Gets the current user and inserts a score.
@@ -179,10 +201,38 @@ class Score(ndb.Model):
         Returns:
             The Score entity that was inserted.
         """
-        current_user = get_endpoints_current_user()
-        entity = cls(result=message.result, user=current_user, board_state=message.board_state)
+        current_user = get_endpoints_current_user().key
+        opponent = User.query(User.name == message.opponent_name)
+        if message.result == 'WIN':
+            result = Result.WIN
+        elif message.result == 'TIE':
+            result = Result.TIE
+        else:
+            result = Result.LOSE
+
+        entity = cls(user=current_user, opponent=opponent,
+            board_state=message.board_state, result=result,
+            )
         entity.put()
         return entity
+
+    def user_score_to_int(self):
+        if self.result == Result.WIN:
+            result = 2
+        elif self.result == Result.TIE:
+            result = 1
+        else:
+            result = 0
+        return result
+
+    def opponent_score_to_int(self):
+        if self.result == Result.WIN:
+            result = 0
+        elif self.result == Result.TIE:
+            result = 1
+        else:
+            result = 2
+        return result
 
     ### the user of the score
     @classmethod
@@ -214,6 +264,9 @@ class GameForm(messages.Message):
     opponent_name = messages.StringField(8, required=True)
     opponent_tic = messages.StringField(9, required=True, default="X")
 
+    is_canceled = messages.BooleanField(10, required=True)
+
+
 
 
 class NewGameForm(messages.Message):
@@ -234,7 +287,6 @@ class MakeMoveForm(messages.Message):
     position = messages.IntegerField(2, required=True)
     
 
-
 class ScoreForm(messages.Message):
     """ScoreForm for outbound Score information"""
     user_name = messages.StringField(1, required=True)
@@ -248,16 +300,28 @@ class ScoreForms(messages.Message):
     """Return multiple ScoreForms"""
     items = messages.MessageField(ScoreForm, 1, repeated=True)
 
+class GameForms(messages.Message):
+    items = messages.MessageField(GameForm, 1, repeated=True)
 
 class StringMessage(messages.Message):
     """StringMessage-- outbound (single) string message"""
     message = messages.StringField(1, required=True)
 
-
 ### tic-tac-toe board
 class BoardMessage(messages.Message):
     """Board board_state"""
     board_state = messages.StringField(1, required=True)
+
+class UserTotalScoreForm(messages.Message):
+    """It will list username, the total scores of all the played games"""
+    user_name = messages.StringField(1, required=True)
+    total_score = messages.IntegerField(2, required=True)
+
+class UserTotalScoreForms(messages.Message):
+    """Many UserTotalScoreForm"""
+    items=messages.MessageField(UserTotalScoreForm, 1, repeated=True)
+
+
 
 
 

@@ -13,7 +13,6 @@
 Tic-Tac-Toe is a simple game for two players. The default opponnet user is computer. It begins with 3X3 empty grid. Each players has to choose a symbol 'O' or 'X'. Two players one after another place 'O' or 'X' in the grid. Whoever succeeds in placing three marks in the straight line wins. Each move has to choose an empty indice in the grid. Many different Tic-Tac-Toe can be played by many different Users at any
 given time. Each game can be retrieved or played by using the path parameter
 `urlsafe_game_key`. 
-
 ## Steps to play the game:
 1. create user with username and email address
 2. start new game with username and opponnet name, and their ticks for playing (optional). Both must be registered.
@@ -36,7 +35,7 @@ given time. Each game can be retrieved or played by using the path parameter
     - Returns: Message confirming creation of the User.
     - Description: Creates a new User. user_name provided must be unique. Will 
     raise a ConflictException if a User with that user_name already exists.
-    
+ 
  - **new_game**
     - Path: 'game'
     - Method: POST
@@ -51,14 +50,28 @@ given time. Each game can be retrieved or played by using the path parameter
     - Parameters: urlsafe_game_key
     - Returns: GameForm with current game state.
     - Description: Returns the current state of a game.
+ 
+ - **get_users**
+    - Path: 'users'
+    - Method: GET
+    - Parameters: None
+    - Returns: Return all the registered users
+    - Description: Each user is username and email. It is useful in testing.
+ 
+ - **get_games**
+    - Path: 'games'
+    - Method: GET
+    - Parameters: None
+    - Returns: GameForms
+    - Description: It can list all the games. urlsafe_game_key, game_over, is_canceld, board_state, and other information of all games is displayed.
+
     
  - **make_move**
     - Path: 'game/{urlsafe_game_key}'
     - Method: PUT
-    - Parameters: urlsafe_game_key, position
+    - Parameters: urlsafe_game_key, user_of_move, position_of_move
     - Returns: GameForm with new game state.
-    - Description: Accepts a position in the free indice in the grid and returns the updated state of the game. 
-    If new position causes a game to end (win, tie, lose), a corresponding Score entity will be created.
+    - Description: Accepts a position in the free indice in the grid and returns the updated state of the game. If new position causes a game to end (win, tie, lose), two corresponding score entities will be created. One score for user and one score for opponent.
     
  - **get_scores**
     - Path: 'scores'
@@ -76,11 +89,48 @@ given time. Each game can be retrieved or played by using the path parameter
     Will raise a NotFoundException if the User does not exist.
     
  - **get_winning_chance**
-    - Path: 'games/active'
+    - Path: 'games/winning_chance'
     - Method: GET
     - Parameters: None
     - Returns: StringMessage
     - Description: Gets the winning chance of the current user.
+
+- **get_user_games**  
+    - Path: 'games/user/{user_name}/active'
+    - Method: GET
+    - Parameters: user_name
+    - Returns: GameForms
+    - Description: list a User's active games.
+
+- **cancel_game** 
+	- Path: '/games/{urlsafe_game_key}/cancel'
+    - Method: POST
+    - Parameters: urlsafe_game_key
+    - Returns: GameForm
+    - Description: Cancel the game. is_canceled is set to 'True'.
+
+- **get_high_total_scores**  
+	- Path: '/scores/total/top/{max_number}'
+    - Method: GET
+    - Parameters: max_number
+    - Returns: StringMessage
+    - Description: List the top total_scores. Each is as (username, total_score). Total score is the sum of scores a use has earned.
+
+- **get_user_rankings**  
+   	- Path: '/rankings/top/{max_number}'
+    - Method: GET
+    - Parameters: max_number
+    - Returns: StringMessage
+    - Description: List the top ranking users. Each is as (username, performance) performance is defined as the ratio of total_score/(2*games). 
+
+
+- **get_game_history**  
+    - Path: 'games/{urlsafe_game_key}/history'
+    - Method: GET
+    - Parameters: urlsafe_game_key
+    - Returns: StringMessage
+    - Description: Display how the tic-tac-toe is played. List all the moves. Each move is (username, position)
+
 
 ##Models Included:
  - **User**
@@ -106,3 +156,7 @@ given time. Each game can be retrieved or played by using the path parameter
     - Multiple ScoreForm container.
  - **StringMessage**
     - General purpose String container.
+ - **UserTotalScoreForm**
+    - Represent the total scores of a user (user_name, total_score)
+ - **UserTotalScoreForms**
+    - Multiple UserTotalScoreForm container
